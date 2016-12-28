@@ -37,6 +37,7 @@ import Data.Attoparsec.Binary
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder
+import Data.Maybe
 
 import qualified Data.ByteString as BS
 
@@ -51,6 +52,7 @@ import Control.Concurrent
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TMVar
 
+import System.Environment
 
 import Control.Exception
 
@@ -70,9 +72,30 @@ readChinaIP h = helper []
 
 main :: IO ()
 main = do
-  let nameF = nameM ++ ".main"
-  
   Log.setup
+  
+  let nameF = nameM ++ ".main"
+
+  zhina_host <- lookupEnv "ZHINA_HOST"
+  zhina_port <- lookupEnv "ZHINA_PORT"
+  world_host <- lookupEnv "WORLD_HOST"
+  world_port <- lookupEnv "WORLD_PORT"
+  
+  zhina_udp_timeout <- lookupEnv "ZHINA_UDP_TIMEOUT"
+  zhina_tcp_timeout <- lookupEnv "ZHINA_TCP_TIMEOUT"
+  world_tcp_timeout <- lookupEnv "WORLD_TCP_TIMEOUT"
+  
+
+  let zhina_host' = fromMaybe "114.114.114.114" zhina_host
+  let zhina_port' = fromMaybe "53" zhina_port
+  let world_host' = fromMaybe "8.8.8.8" world_host
+  let world_port' = fromMaybe "53" world_port
+
+
+  let zhina_udp_timeout' = maybe 100000 read zhina_udp_timeout
+  let zhina_tcp_timeout' = maybe 1000000 read zhina_tcp_timeout 
+  let world_tcp_timeout' = maybe 5000000 read world_tcp_timeout 
+
 
   l <- readChinaIP stdin
   
@@ -81,11 +104,19 @@ main = do
 
 
   bracket
-    (do 
-        r_china_udp <- UDP.new $ UDP.Config {UDP.host = "114.114.114.114", UDP.port = "53"}
-        r_china_tcp <- TCP.new $ TCP.Config {TCP.host = "223.5.5.5", TCP.port = "53"}
-        r_world <- TCP.new $ TCP.Config {TCP.host = "8.8.8.8", TCP.port = "53"}
-        
+    (do
+        let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port'}
+        r_china_udp <- UDP.new $ c_china_udp
+        infoM nameF $ "created UDP client to " ++ (show c_china_udp)
+
+        let c_china_tcp =  TCP.Config {TCP.host = zhina_host', TCP.port = zhina_port'}
+        r_china_tcp <- TCP.new $ c_china_tcp
+        infoM nameF $ "created TCP client to " ++ (show c_china_tcp)
+
+        let c_world_tcp =  TCP.Config {TCP.host = world_host', TCP.port = world_port'}
+        r_world <- TCP.new $ c_world_tcp
+        infoM nameF $ "created TCP client to " ++ (show c_world_tcp)
+
         return (r_china_udp, r_china_tcp, r_world)
     )
     (\(r_china_udp, r_china_tcp, r_world) -> do
@@ -94,9 +125,9 @@ main = do
         R.delete r_world
     )
     (\(r_china_udp, r_china_tcp, r_world) -> do
-        let r_china_udp' = timeout 500000 $ R.resolve r_china_udp
-        let r_china_tcp' = timeout 1000000 $ R.resolve r_china_tcp
-        let r_world' = timeout 5000000 $ R.resolve r_world
+        let r_china_udp' = timeout zhina_udp_timeout' $ R.resolve r_china_udp
+        let r_china_tcp' = timeout zhina_tcp_timeout' $ R.resolve r_china_tcp
+        let r_world' = timeout world_tcp_timeout' $ R.resolve r_world
         let r_udp = ZDNS.resolve $ ZDNS.Config
                 { ZDNS.china = r_china_udp'
                 , ZDNS.world = r_world'
