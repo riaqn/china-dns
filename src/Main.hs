@@ -76,6 +76,8 @@ main = do
   
   let nameF = nameM ++ ".main"
 
+  host <- lookupEnv "HOST"
+  port <- lookupEnv "PORT"
   zhina_host <- lookupEnv "ZHINA_HOST"
   zhina_port <- lookupEnv "ZHINA_PORT"
   world_host <- lookupEnv "WORLD_HOST"
@@ -86,6 +88,8 @@ main = do
   world_tcp_timeout <- lookupEnv "WORLD_TCP_TIMEOUT"
   
 
+  let host' = fromMaybe "127.0.0.1" host
+  let port' = fromMaybe "5300" port
   let zhina_host' = fromMaybe "114.114.114.114" zhina_host
   let zhina_port' = fromMaybe "53" zhina_port
   let world_host' = fromMaybe "8.8.8.8" world_host
@@ -139,24 +143,35 @@ main = do
                                                }
         bracket
           (do
-              t_udp <- forkIO $ udp $ SUDP.resolve $ r_udp
-              t_tcp <- forkIO $ tcp_listen $ STCP.resolve $ r_tcp
+              t_udp <- forkIO $ udp $ Config { resolve = SUDP.resolve $ r_udp
+                                             , host = host'
+                                             , port = port'
+                                             }
+              t_tcp <- forkIO $ tcp_listen $ Config { resolve = STCP.resolve $ r_tcp
+                                                    , host = host'
+                                                    , port = port'
+                                                    }
               return (t_udp, t_tcp))
           (\(t_udp, t_tcp) -> do
               killThread t_udp
               killThread t_tcp)
           (\_ -> forever $ threadDelay 1000000)
     )
+data Config a b = Config { resolve :: R.Resolve a b
+                         , host :: String
+                         , port :: String
+                       }
     
-udp :: R.Resolve ByteString ByteString -> IO ()
-udp r = do
+    
+udp :: Config ByteString ByteString -> IO ()
+udp c = do
   let nameF = nameM ++ ".udp"
   let maxLength = 512 -- 512B is max length of UDP message
                       -- due ot rfc1035
   
   infoM nameF $ "starting UDP server"
   let hints = defaultHints { addrSocketType = Datagram, addrFlags = [AI_ADDRCONFIG, AI_PASSIVE]}
-  addr:_ <- getAddrInfo (Just hints) Nothing (Just "5300")
+  addr:_ <- getAddrInfo (Just hints) (Just $ host c) (Just $ port c)
   bracket 
     (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
     close
@@ -166,16 +181,16 @@ udp r = do
         forever $ do
           (a, sa) <- recvFrom sock maxLength
           forkIO $ do 
-            b <- r a
+            b <- resolve c a
             void $ sendTo sock b sa
     )
     
-tcp_listen :: R.Resolve BSL.ByteString BSL.ByteString -> IO ()
-tcp_listen r = do
+tcp_listen :: Config BSL.ByteString BSL.ByteString -> IO ()
+tcp_listen c = do
   let nameF = nameM ++ ".tcp"
   infoM nameF "starting TCP server"
   let hints = defaultHints { addrSocketType = Stream, addrFlags = [AI_ADDRCONFIG, AI_PASSIVE]}
-  addr:_ <- getAddrInfo (Just hints) Nothing (Just "5300")
+  addr:_ <- getAddrInfo (Just hints) (Just $ host c) (Just $ port c)
   bracket
     (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
     close
@@ -189,7 +204,7 @@ tcp_listen r = do
             (\(sock', sa) -> close sock')
             (\(sock', sa) -> do 
                 let nameConn = nameF ++ "." ++ (show sa)
-                forkFinally (tcp sock' nameConn r) (\e -> close sock'))
+                forkFinally (tcp sock' nameConn (resolve c)) (\e -> close sock'))
     )
 
 
