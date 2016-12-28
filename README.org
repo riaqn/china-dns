@@ -18,13 +18,13 @@
 
 本软件在启动时会从 =stdin= 读入中国的 IPv4 列表, 格式大概如下:
 #+begin_example
-127.0.0.1/24
-192.168.0.0.16
+192.168.0.0/16
+127.0.0.1
 ...
 #+end_example
 
-本项目自带了一个能从 [[ftp.ripe.net]] 的公开数据库生成该文件的脚本
-[[./china.awk]], *请修改该文件并且加入你的VPS的IP地址*, 然后用以下命令生成中国 IPv4 列表:
+本项目自带了一个能从 [[ftp://ftp.ripe.net/pub/stats/apnic/][ripe.net]] 的公开数据库生成该文件的脚本
+[[china.awk]], *请修改该文件并且加入你的VPS的IP地址*, 然后用以下命令生成中国 IPv4 列表:
 #+begin_src sh
 curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > china.txt
 #+end_src sh
