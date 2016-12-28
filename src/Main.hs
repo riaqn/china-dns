@@ -2,14 +2,12 @@ module Main where
 
 import qualified ChinaDNS as CDNS
 import IPSet
+import qualified Log
 
 import Data.IP
 
 import System.IO
 import System.Log.Logger
-import qualified System.Log.Handler as H
-import qualified System.Log.Handler.Simple as HS
-import System.Log.Formatter
 
 import Network.Socket hiding (recv, recvFrom, send, sendTo)
 import Network.Socket.ByteString 
@@ -68,11 +66,8 @@ readChinaIP h = helper []
 main :: IO ()
 main = do
   let nameF = nameM ++ ".main"
-  h <- HS.streamHandler stderr DEBUG >>= \lh -> return $ H.setFormatter lh $
-    simpleLogFormatter "[$tid : $loggername] $msg"
-    
-  updateGlobalLogger rootLoggerName ((setLevel DEBUG) . setHandlers [h])
   
+  Log.setup
 
   l <- readChinaIP stdin
   
@@ -96,7 +91,7 @@ main = do
     (\(r_china_udp, r_china_tcp, r_world) -> do
         let r_china_udp' = timeout 500000 $ R.resolve r_china_udp
         let r_china_tcp' = timeout 1000000 $ R.resolve r_china_tcp
-        let r_world' = timeout 1000000 $ R.resolve r_world
+        let r_world' = timeout 5000000 $ R.resolve r_world
         let r_udp = CDNS.resolve $ CDNS.Config
                 { CDNS.china = r_china_udp'
                 , CDNS.world = r_world'
