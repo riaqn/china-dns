@@ -41,11 +41,16 @@ import Data.ByteString.Builder
 import qualified Data.ByteString as BS
 
 import Control.Monad
+import Control.Monad.STM
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Except
+
 import Control.Concurrent
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM.TMVar
+
 
 import Control.Exception
 
@@ -151,46 +156,48 @@ tcp r = do
           (sock', sa) <- accept sock
           let nameConn = nameF ++ "." ++ (show sa)
           forkIO $ do
-            this <- myThreadId
-
-            qi <- newEmptyMVar
-            qo <- newEmptyMVar
+            qi <- newEmptyTMVarIO
+            qo <- newEmptyTMVarIO
+            si <- newTVarIO False
+            so <- newTVarIO False
 
             bracket 
               (do
+                  
                   -- thread receiving messages to qi
-                  ti <- forkIO $ do
-                    let nameRecv = nameConn ++ ".recv"
-                    let recvAll' n = do  
-                          bs <- SL.recv sock' n
-                          when (BSL.length bs == 0) $ do
-                            killThread this
-                          mappend (lazyByteString bs) <$> (recvAll' $ n - (BSL.length bs))
-                        recvAll n = toLazyByteString <$> recvAll' n
+                  ti <- forkFinally
+                    (do
+                        let nameRecv = nameConn ++ ".recv"
+                        let recvAll' n = do  
+                              bs <- SL.recv sock' n
+                              when (BSL.length bs == 0) $ throwIO ThreadKilled
+                              mappend (lazyByteString bs) <$> (recvAll' $ n - (BSL.length bs))
+                            recvAll n = toLazyByteString <$> recvAll' n
 
-                    forever $ runMaybeT $ do
-                      n <- lift $ recvAll 2
-                      n' <- case parseOnly anyWord16be (BSL.toStrict n) of 
-                        Left e -> do
-                          lift $ errorM nameRecv e >> killThread this
-                          MaybeT $ return $ Nothing
-                        Right n' -> MaybeT $ return $ Just n'
-                      lift $ do 
-                        bs <- recvAll $ fromIntegral n'
-                        putMVar qi bs
+                        forever $ runMaybeT $ do
+                          n <- lift $ recvAll 2
+                          n' <- case parseOnly anyWord16be (BSL.toStrict n) of 
+                            Left e -> error "How is it possible?"
+                            Right n' -> return n'
+                          lift $ do 
+                            bs <- recvAll $ fromIntegral n'
+                            atomically $ putTMVar qi bs)
+                    (\_ -> atomically $ writeTVar si True)
 
                   -- thread sending messages from qo
-                  to <- forkIO $ do
-                    let nameSend = nameConn ++ ".send"
-                    let sendAll bs = if BSL.null bs  then
-                                       return ()
-                                     else do
-                          n <- SL.send sock' bs
-                          sendAll (BSL.drop n bs)
-                    forever $ do
-                      bs <- takeMVar qo
-                      sendAll $ toLazyByteString $ word16BE $ fromIntegral $ BSL.length bs
-                      sendAll bs
+                  to <- forkFinally
+                    (do
+                        let nameSend = nameConn ++ ".send"
+                        let sendAll bs = if BSL.null bs  then
+                                           return ()
+                                         else do
+                              n <- SL.send sock' bs
+                              sendAll (BSL.drop n bs)
+                        forever $ do
+                          bs <- atomically $ takeTMVar qo
+                          sendAll $ toLazyByteString $ word16BE $ fromIntegral $ BSL.length bs
+                          sendAll bs)
+                    (\_ -> atomically $ writeTVar so True)
                   return (ti, to)
               )
               (\(ti, to) -> do
@@ -198,9 +205,16 @@ tcp r = do
                   killThread to
               )
               (\_ -> forever $ do
-                  a <- takeMVar qi
-                  forkIO $ do 
-                    b <- r a
-                    putMVar qo b
+                  a <- atomically $ do
+                    x <- readTVar si
+                    if x then tryTakeTMVar qi
+                      else Just <$> takeTMVar qi
+                  case a of
+                    Nothing -> throwIO ThreadKilled
+                    Just a' -> forkIO $ do 
+                      b <- r a'
+                      atomically $ do
+                        x <- readTVar so
+                        when (not x) $ putTMVar qo b
               )
     )

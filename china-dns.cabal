@@ -27,6 +27,7 @@ executable china-dns
                      , attoparsec-binary
                      , bytestring
                      , transformers
+                     , stm
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts
