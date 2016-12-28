@@ -1,8 +1,8 @@
-name:                china-dns
+name:                zhina-dns
 version:             0.1.0.0
-synopsis:            Simple project template from stack
-description:         Please see README.md
-homepage:            https://github.com/riaqn/china-dns#readme
+synopsis:            A DNS proxy preventing pollution and CDN-friendly
+description:         Please see README.org
+homepage:            https://github.com/riaqn/zhina-dns#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Zesen Qian
@@ -11,7 +11,7 @@ copyright:           GPL3
 category:            Network
 build-type:          Simple
 cabal-version:       >=1.10
-extra-source-files:  README.md
+extra-source-files:  README.org
 
 executable china-dns
   hs-source-dirs:      src
@@ -31,3 +31,7 @@ executable china-dns
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts
+
+source-repository head
+  type:     git
+  location: https://github.com/riaqn/zhina-dns
