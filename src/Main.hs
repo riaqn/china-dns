@@ -109,7 +109,7 @@ main = do
         bracket
           (do
               t_udp <- forkIO $ udp $ SUDP.resolve $ r_udp
-              t_tcp <- forkIO $ tcp $ STCP.resolve $ r_tcp
+              t_tcp <- forkIO $ tcp_listen $ STCP.resolve $ r_tcp
               return (t_udp, t_tcp))
           (\(t_udp, t_tcp) -> do
               killThread t_udp
@@ -139,8 +139,8 @@ udp r = do
             void $ sendTo sock b sa
     )
     
-tcp :: R.Resolve BSL.ByteString BSL.ByteString -> IO ()
-tcp r = do
+tcp_listen :: R.Resolve BSL.ByteString BSL.ByteString -> IO ()
+tcp_listen r = do
   let nameF = nameM ++ ".tcp"
   infoM nameF "starting TCP server"
   let hints = defaultHints { addrSocketType = Stream, addrFlags = [AI_ADDRCONFIG, AI_PASSIVE]}
@@ -153,68 +153,74 @@ tcp r = do
         infoM nameF $ "bound to " ++ (show $ addrAddress addr)
         listen sock 5
         forever $ do
-          (sock', sa) <- accept sock
-          let nameConn = nameF ++ "." ++ (show sa)
-          forkIO $ do
-            qi <- newEmptyTMVarIO
-            qo <- newEmptyTMVarIO
-            si <- newTVarIO False
-            so <- newTVarIO False
-
-            bracket 
-              (do
-                  
-                  -- thread receiving messages to qi
-                  ti <- forkFinally
-                    (do
-                        let nameRecv = nameConn ++ ".recv"
-                        let recvAll' n = do  
-                              bs <- SL.recv sock' n
-                              when (BSL.length bs == 0) $ throwIO ThreadKilled
-                              mappend (lazyByteString bs) <$> (recvAll' $ n - (BSL.length bs))
-                            recvAll n = toLazyByteString <$> recvAll' n
-
-                        forever $ runMaybeT $ do
-                          n <- lift $ recvAll 2
-                          n' <- case parseOnly anyWord16be (BSL.toStrict n) of 
-                            Left e -> error "How is it possible?"
-                            Right n' -> return n'
-                          lift $ do 
-                            bs <- recvAll $ fromIntegral n'
-                            atomically $ putTMVar qi bs)
-                    (\_ -> atomically $ writeTVar si True)
-
-                  -- thread sending messages from qo
-                  to <- forkFinally
-                    (do
-                        let nameSend = nameConn ++ ".send"
-                        let sendAll bs = if BSL.null bs  then
-                                           return ()
-                                         else do
-                              n <- SL.send sock' bs
-                              sendAll (BSL.drop n bs)
-                        forever $ do
-                          bs <- atomically $ takeTMVar qo
-                          sendAll $ toLazyByteString $ word16BE $ fromIntegral $ BSL.length bs
-                          sendAll bs)
-                    (\_ -> atomically $ writeTVar so True)
-                  return (ti, to)
-              )
-              (\(ti, to) -> do
-                  killThread ti
-                  killThread to
-              )
-              (\_ -> forever $ do
-                  a <- atomically $ do
-                    x <- readTVar si
-                    if x then tryTakeTMVar qi
-                      else Just <$> takeTMVar qi
-                  case a of
-                    Nothing -> throwIO ThreadKilled
-                    Just a' -> forkIO $ do 
-                      b <- r a'
-                      atomically $ do
-                        x <- readTVar so
-                        when (not x) $ putTMVar qo b
-              )
+          bracketOnError
+            (accept sock)
+            (\(sock', sa) -> close sock')
+            (\(sock', sa) -> do 
+                let nameConn = nameF ++ "." ++ (show sa)
+                forkFinally (tcp sock' nameConn r) (\e -> close sock'))
     )
+
+
+tcp sock' nameConn r = do
+  qi <- newEmptyTMVarIO
+  qo <- newEmptyTMVarIO
+  si <- newTVarIO False
+  so <- newTVarIO False
+
+  bracket 
+    (do
+        -- thread receiving messages to qi
+        ti <- forkFinally
+          (do
+              let nameRecv = nameConn ++ ".recv"
+              let recvAll' n = do  
+                    bs <- SL.recv sock' n
+                    when (BSL.length bs == 0) $ throwIO ThreadKilled
+                    mappend (lazyByteString bs) <$> (recvAll' $ n - (BSL.length bs))
+                  recvAll n = toLazyByteString <$> recvAll' n
+
+              forever $ runMaybeT $ do
+                n <- lift $ recvAll 2
+                n' <- case parseOnly anyWord16be (BSL.toStrict n) of 
+                  Left e -> error "How is it possible?"
+                  Right n' -> return n'
+                lift $ do 
+                  bs <- recvAll $ fromIntegral n'
+                  atomically $ putTMVar qi bs)
+          (\_ -> atomically $ writeTVar si True)
+
+        -- thread sending messages from qo
+        to <- forkFinally
+          (do
+              let nameSend = nameConn ++ ".send"
+              let sendAll bs = if BSL.null bs  then
+                                 return ()
+                               else do
+                    n <- SL.send sock' bs
+                    sendAll (BSL.drop n bs)
+              forever $ do
+                bs <- atomically $ takeTMVar qo
+                sendAll $ toLazyByteString $ word16BE $ fromIntegral $ BSL.length bs
+                sendAll bs)
+          (\_ -> atomically $ writeTVar so True)
+        return (ti, to)
+    )
+    (\(ti, to) -> do
+        killThread ti
+        killThread to
+    )
+    (\_ -> forever $ do
+        a <- atomically $ do
+          x <- readTVar si
+          if x then tryTakeTMVar qi
+            else Just <$> takeTMVar qi
+        case a of
+          Nothing -> throwIO ThreadKilled
+          Just a' -> forkIO $ do 
+            b <- r a'
+            atomically $ do
+              x <- readTVar so
+              when (not x) $ putTMVar qo b
+    )
+
