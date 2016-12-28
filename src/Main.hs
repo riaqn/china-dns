@@ -1,6 +1,6 @@
 module Main where
 
-import qualified ChinaDNS as CDNS
+import qualified ZhinaDNS as ZDNS
 import IPSet
 import qualified Log
 
@@ -97,14 +97,14 @@ main = do
         let r_china_udp' = timeout 500000 $ R.resolve r_china_udp
         let r_china_tcp' = timeout 1000000 $ R.resolve r_china_tcp
         let r_world' = timeout 5000000 $ R.resolve r_world
-        let r_udp = CDNS.resolve $ CDNS.Config
-                { CDNS.china = r_china_udp'
-                , CDNS.world = r_world'
-                , CDNS.chinaIP = ips
+        let r_udp = ZDNS.resolve $ ZDNS.Config
+                { ZDNS.china = r_china_udp'
+                , ZDNS.world = r_world'
+                , ZDNS.chinaIP = ips
                 }
-            r_tcp = CDNS.resolve $ CDNS.Config { CDNS.china = r_china_tcp'
-                                               , CDNS.world = r_world'
-                                               , CDNS.chinaIP = ips
+            r_tcp = ZDNS.resolve $ ZDNS.Config { ZDNS.china = r_china_tcp'
+                                               , ZDNS.world = r_world'
+                                               , ZDNS.chinaIP = ips
                                                }
         bracket
           (do

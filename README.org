@@ -1,11 +1,17 @@
 #+TITLE: 一个抗污染，同时CDN友好的DNS代理
 
-*注意: 本软件用 Haskell 编写,对于小内存/小存储设备并不友好. 树莓派类设
-备有待测试*
+*注意: 本软件用 Haskell 编写,对于小内存/小存储设备并不友好. 树莓派类设备有待测试*
 
+之所以要写这个是因为已有的 ChinaDNS-C 经常行为异常,所以不如直接自己写
+一个. 用haskell是因为
+- 高并发
+- 静态安全
+- 不会造成脑损伤
+
+* 概述
 本软件没有配置接口,所有配置都在源代码内进行. 
 - 如果要修改上游服务器,请查看 [[src/Main.hs]]
-- 如果要修改解析策略,请查看 [[src/ChinaDNS.hs]]
+- 如果要修改解析策略,请查看 [[src/ZhinaDNS.hs]]
 
 本软件的自带解析策略:
 1. 收到一个请求, 同时向国内DNS (例如 =114.114.114.114= )和国外DNS (例
@@ -16,6 +22,7 @@
 
 如果你解析策略有任何建议,欢迎到 issue 处提出. 
 
+* 运行
 本软件在启动时会从 =stdin= 读入中国的 IPv4 列表, 格式大概如下:
 #+begin_example
 192.168.0.0/16
@@ -30,13 +37,13 @@ curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > c
 #+end_src sh
 此时 =china.txt= 里就是中国的IP了. 现在就可以运行此程序了:
 #+begin_src sh
-  stack exec china-dns < china.txt
+  stack exec zhina-dns < china.txt
 #+end_src
 
 建议在本服务的外面套一层pdnsd, 参考配置如下:
 #+begin_example
   server {
-          label= "china-dns";
+          label= "zhina-dns";
           ip = 127.0.0.1;
           port = 5300;
           edns_query=off;
@@ -50,6 +57,16 @@ curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > c
           caching=off;
   }
 #+end_example
-这样在 =china-dns= 失败后, pdnsd会临时返回 ISP 提供的IP而不做cache.
+这样在 =zhina-dns= 失败后, pdnsd会临时返回 ISP 提供的IP而不做cache.
+
+* 待办
+  - 一个适用于大多数普通用户的简单配置接口
+
+  以下大多数功能其实都是上游库 [[https://github.com/riaqn/resolve][resolve]] (也是我维护的) 需要做的,上游库
+  增加了之后,在本软件中添加相应功能就很简单.
+  - cache
+  - edns支持
+  - =resolv.conf= 支持
+
 
 

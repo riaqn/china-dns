@@ -1,4 +1,4 @@
-module ChinaDNS where
+module ZhinaDNS where
 
 import qualified Resolve.Types as T
 import Resolve.DNS.Types
