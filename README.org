@@ -3,12 +3,13 @@
 *急需志愿者提供静态预编译的二进制版本. 请联系 zhina 横杠 dns at riaqn dot org*
 
 目前已经有的二进制版本:
-|        | Linux                  | MacOS |
-|--------+------------------------+-------|
-| x86_64 | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-linux][zhina-dns-x86_64-linux]] |       |
-| x86    |                        |       |
+|        | Linux   | MacOS   | Windows |
+|--------+---------+---------+---------|
+| x86_64 | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-linux][0.1.0.0]] | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-macos.zhina-dns][0.1.0.0]] |         |
+| x86    |         | n/a     |         |
+| ..     |         |         |         |
 
-zhina 发音"支那". 之所以要写这个是因为已有的 ChinaDNS-C 经常行为异常,所以不如直接自己写
+之所以要写这个是因为已有的 ChinaDNS-C 经常行为异常,所以不如直接自己写
 一个. 用haskell是因为
 - 高并发
 - 静态安全
