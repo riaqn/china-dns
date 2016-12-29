@@ -13,7 +13,7 @@
 一个. 用haskell是因为
 - 高并发
 - 静态安全
-- 不会造成脑损伤
+- 开发效率高
 
 * 概述
 本软件的自带解析策略:
@@ -32,6 +32,7 @@
 - =HOST= 绑定的地址, 默认 =127.0.0.1=
 - =PORT= 绑定的端口, 默认 =5300=
 - =ZHINA_HOST= 国内的上游服务器地址, 默认 =114.114.114.114=
+
   请不要用阿里的DNS (223.5.5.5), 因为他们不支持基于 TCP 的查询, 对于部
   分请求会报 Timeout.
 - =ZHINA_PORT= 国内的上游服务器端口, 默认 =53=
@@ -61,7 +62,7 @@ curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > c
 #+end_src sh
 此时 =china.txt= 里就是中国的IP了. 现在就可以运行此程序了:
 #+begin_src sh
-  stack exec zhina-dns < china.txt
+  ZHINA_TCP_TIMEOUT=2000000 ./zhina-dns < china.txt
 #+end_src
 
 建议在本服务的外面套一层pdnsd, 参考配置如下:
