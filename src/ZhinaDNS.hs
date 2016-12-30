@@ -4,7 +4,6 @@ import qualified Resolve.Types as T
 import Resolve.DNS.Types
 import qualified Resolve.DNS.Channel as C
 import IPSet
-import Data.IP hiding (fromIPv4, toIPv4)
 
 import Control.Monad
 import Control.Monad.Trans.Except

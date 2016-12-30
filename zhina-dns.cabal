@@ -20,7 +20,6 @@ executable zhina-dns
   build-depends:       base >= 4.7 && < 5
                      , resolve
                      , IntervalMap
-                     , iproute
                      , hslogger
                      , network
                      , attoparsec
@@ -28,6 +27,7 @@ executable zhina-dns
                      , bytestring
                      , transformers
                      , stm
+                     , parsec
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts

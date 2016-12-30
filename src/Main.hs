@@ -2,9 +2,9 @@ module Main where
 
 import qualified ZhinaDNS as ZDNS
 import IPSet
+import Text.Parsec
+import Parse
 import qualified Log
-
-import Data.IP
 
 import System.IO
 import System.Log.Logger
@@ -32,7 +32,7 @@ import qualified Resolve.DNS.Truncation as Truncation
 import qualified Resolve.DNS.Server.UDP as SUDP
 import qualified Resolve.DNS.Server.TCP as STCP
 
-import Data.Attoparsec.ByteString
+import qualified  Data.Attoparsec.ByteString as AP
 import Data.Attoparsec.Binary
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString (ByteString)
@@ -59,15 +59,17 @@ import Control.Exception
 
 nameM = "Main"
 
-readChinaIP :: Handle -> IO [AddrRange IPv4]
-readChinaIP h = helper []
-  where helper t = do
+readChinaIP :: Handle -> IO (Either String [IPRange IPv4])
+readChinaIP h = helper 0 []
+  where helper i t = do
           done <- hIsEOF h
           if done then do
-            return t
+            return $ Right t
             else do
             l <- hGetLine h
-            helper (read l : t)
+            case parse (line i) "" l of
+              Left e -> return $ Left $ show e
+              Right ip' -> helper (i +1) (maybe t (\ip -> ip : t) ip')
 
 
 main :: IO ()
@@ -101,7 +103,10 @@ main = do
   let world_tcp_timeout' = maybe 5000000 read world_tcp_timeout 
 
 
-  l <- readChinaIP stdin
+  l' <- readChinaIP stdin
+  l <- case l' of
+    Left e -> error e
+    Right l -> return l
   
   let ips = foldl (\a b -> add a b) create l
   infoM nameF $ (show $ size ips) ++  " china subnets loaded"
@@ -228,7 +233,7 @@ tcp sock' nameConn r = do
 
               forever $ runMaybeT $ do
                 n <- lift $ recvAll 2
-                n' <- case parseOnly anyWord16be (BSL.toStrict n) of 
+                n' <- case AP.parseOnly anyWord16be (BSL.toStrict n) of 
                   Left e -> error "How is it possible?"
                   Right n' -> return n'
                 lift $ do 
