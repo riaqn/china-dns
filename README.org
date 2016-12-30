@@ -5,7 +5,7 @@
 目前已经有的二进制版本:
 |        | Linux   | MacOS   | Windows |
 |--------+---------+---------+---------|
-| x86_64 | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-linux][0.1.0.0]] | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-macos.zhina-dns][0.1.0.0]] |         |
+| x86_64 | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.1.0/zhina-dns-x86_64-linux][0.1.1.0]] | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-macos.zhina-dns][0.1.0.0]] |         |
 | x86    |         | n/a     |         |
 | ..     |         |         |         |
 
