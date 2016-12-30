@@ -1,13 +1,15 @@
 #+TITLE: 一个抗污染，同时CDN友好的DNS代理
 
-*急需志愿者提供静态预编译的二进制版本. 请联系 zhina 横杠 dns at riaqn dot org*
+*急需各个平台上的静态二进制版本, 有兴趣参与的同学请联系 zhina 横杠 dns at riaqn dot org*
 
 目前已经有的二进制版本:
-|        | Linux   | MacOS   | Windows |
-|--------+---------+---------+---------|
-| x86_64 | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.1.0/zhina-dns-x86_64-linux][0.1.1.0]] | [[https://github.com/riaqn/zhina-dns/releases/download/0.1.0.0/zhina-dns-x86_64-macos.zhina-dns][0.1.0.0]] |         |
-| x86    |         | n/a     |         |
-| ..     |         |         |         |
+|        | Linux | MacOS | Windows |
+|--------+-------+-------+---------|
+| x86_64 | ✓     | ✓     |         |
+| x86    |       | n/a   |         |
+| ..     |       |       |         | 
+
+请到Releases页下载.
 
 之所以要写这个是因为已有的 ChinaDNS-C 经常行为异常,所以不如直接自己写
 一个. 用haskell是因为
@@ -25,7 +27,7 @@
 
 *注意: 对于国外DNS我们只会走TCP.*
 
-如果你对解析策略有任何建议,欢迎到 [[https://github.com/riaqn/zhina-dns/issues][issue]] 处提出. 
+如果你对解析策略有任何建议,欢迎到issues页提出. 
 
 * 配置
 本软件提供最小化的配置接口, 接受以下环境变量:
