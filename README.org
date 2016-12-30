@@ -50,9 +50,14 @@
 * 运行
 本软件在启动时会从 =stdin= 读入中国的 IPv4 列表, 格式大概如下:
 #+begin_example
-192.168.0.0/16
-127.0.0.1
-...
+  # this is allowed
+    # this is also allowed
+     
+  #^ empty line (with or without spaces) is allowed
+  #v ip range prefixed or suffixed with spaces is allowed
+     1.0.1.0/24
+  #v single ip    address is also allowed
+   127.0.0.1
 #+end_example
 
 本项目自带了一个能从 [[ftp://ftp.ripe.net/pub/stats/apnic/][ripe.net]] 的公开数据库生成该文件的脚本
