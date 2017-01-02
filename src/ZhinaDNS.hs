@@ -1,10 +1,10 @@
 module ZhinaDNS where
 
 import qualified Resolve.Types as R
-import Resolve.DNS.Types
+import Resolve.DNS.Types hiding (Query, Response)
+import Resolve.DNS.Lookup hiding (Config) 
 import IPSet
 
-import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Concurrent
 import Control.Exception
@@ -14,37 +14,22 @@ import System.Log.Logger
 
 nameM = "ZhinaDNS"
 
-data Config = Config { china :: R.Resolve Message Message
-                     , world :: R.Resolve Message Message
+data Config = Config { china :: R.Resolve Query Response
+                     , world :: R.Resolve Query Response
                      , chinaIP :: IPSet IPv4
                      }
 
 
-resolve :: Config -> R.Resolve Message Message
+resolve :: Config -> R.Resolve Query Response
 resolve c a = do
-  let a' = a { opt = Nothing } -- strip OPT RR
-  
   let nameF = nameM ++ ".resolve"
   m_china <- newEmptyMVar
   m_world <- newEmptyMVar
 
-  let errRep m = Message { header = (header m)  { qr = Response
-                                                , tc = False
-                                                , ra = True
-                                                , zero = 0
-                                                , rcode = ServFail
-                                                }
-                         , question = question m
-                         , answer = []
-                         , authority = []
-                         , additional = []
-                         , opt = Nothing
-                         }
-
   bracket
     (do 
-      t_china <- forkIO $ putMVar m_china =<< try (china c a')
-      t_world <- forkIO $ putMVar m_world =<< try (world c a')
+      t_china <- forkIO $ putMVar m_china =<< try (china c a)
+      t_world <- forkIO $ putMVar m_world =<< try (world c a)
       return (t_china, t_world)
     )
     (\(t_china, t_world) -> do
@@ -53,31 +38,28 @@ resolve c a = do
     )
     (\_ -> either id id <$> (runExceptT $
               do 
-                b_china <- lift $ takeMVar m_china
-                b_china' <- case b_china of
+                b_china' <- lift $ takeMVar m_china
+                b_china <- case b_china' of
                   Left e -> do
-                    lift $ errorM nameF $ show (e :: SomeException)
-                    throwE $ errRep a
+                    lift $ debugM nameF $ "zhina: " ++ show (e :: SomeException)
+                    lift $ throwIO e
                   Right b' -> return b'
-
-                when ((rcode $ header b_china') /= NoErr) $ throwE $ errRep a
 
                 let isForeign rdata' = case rdata' of
                       RR_A ip -> not $ test (chinaIP c) ip
                       _ -> False
-                b_final <- if any (\rr -> isForeign (rdata rr)) (answer b_china') then do
+                b_final <- if any (\rr -> isForeign (rdata rr)) (ranswer b_china) then do
                   lift $ debugM nameF "foreign results detected, waiting for foreign DNS"
-                  b_world <- lift $ takeMVar m_world
-                  b_world' <- case b_world of
+                  b_world' <- lift $ takeMVar m_world
+                  b_world <- case b_world' of
                     Left e -> do
-                      lift $ errorM nameF $ show (e :: SomeException)
-                      throwE $ errRep a
+                      lift $ debugM nameF $ "world: " ++ show (e :: SomeException)
+                      lift $ throwIO e 
                     Right b' -> return b'
-                  when ((rcode $ header b_world')  /= NoErr) $ throwE $ errRep a
-
-                  return b_world'
+                    
+                  return b_world
                   else
-                  return b_china'
+                  return b_china
 
-                return $ b_final {header = (header b_final) {ident = ident $ header $ a}}
+                return $ b_final
     ))
