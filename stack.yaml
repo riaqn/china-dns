@@ -39,7 +39,8 @@ packages:
 - '.'
 - location:
     git: https://github.com/riaqn/resolve.git
-    commit: bd015032a5927aaf75aa24111bc0f1baa7ff72e1
+    commit: 42ad886cde122a80e542d746a2d02affda04cc3d
+#     /home/riaqn/resolve
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver

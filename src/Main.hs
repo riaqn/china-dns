@@ -13,40 +13,25 @@ import Network.Socket hiding (recv, recvFrom, send, sendTo)
 import Network.Socket.ByteString 
 import qualified Network.Socket.ByteString.Lazy as SL
 
-
 import qualified Resolve.Types as R
-import qualified Resolve.DNS.Channel as C
-
-
-import qualified Resolve.DNS.Helper.DNS as DNS
-import qualified Resolve.DNS.Helper.UDP as UDP
-import qualified Resolve.DNS.Helper.LiveTCP as TCP
+import qualified Resolve.DNS.Transport.Helper.UDP as UDP
+import qualified Resolve.DNS.Transport.Helper.LiveTCP as TCP
+import qualified Resolve.DNS.Transport as Transport
+import Resolve.DNS.Utils
+import Resolve.DNS.Coding
 
 import Resolve.Timeout
-import Resolve.Retry
-import qualified Resolve.DNS.Types as T
-import qualified Resolve.DNS.Encode as E
-import qualified Resolve.DNS.Decode as D
-import qualified Resolve.DNS.Truncation as Truncation
+import qualified Resolve.Log as L
 
-import qualified Resolve.DNS.Server.UDP as SUDP
-import qualified Resolve.DNS.Server.TCP as STCP
-
-import qualified  Data.Attoparsec.ByteString as AP
-import Data.Attoparsec.Binary
 import qualified Data.ByteString.Lazy as BSL
-import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Builder
 import Data.Maybe
-
-import qualified Data.ByteString as BS
 
 import Control.Monad
 import Control.Monad.STM
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Except
 
 import Control.Concurrent
 import Control.Concurrent.STM.TVar
@@ -70,7 +55,6 @@ readChinaIP h = helper 0 []
             case parse (line i) "" l of
               Left e -> return $ Left $ show e
               Right ip' -> helper (i +1) (maybe t (\ip -> ip : t) ip')
-
 
 main :: IO ()
 main = do
@@ -112,63 +96,55 @@ main = do
   infoM nameF $ (show $ size ips) ++  " china subnets loaded"
 
 
-  bracket
-    (do
-        let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port'}
-        r_china_udp <- UDP.new $ c_china_udp
-        infoM nameF $ "created UDP client to " ++ (show c_china_udp)
+  let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port', UDP.p_max = 4096}
+  t_china_udp <- UDP.new $ c_china_udp
+  r_china_udp <- Transport.new t_china_udp
+  infoM nameF $ "created client: " ++ (show c_china_udp)
 
-        let c_china_tcp =  TCP.Config {TCP.host = zhina_host', TCP.port = zhina_port'}
-        r_china_tcp <- TCP.new $ c_china_tcp
-        infoM nameF $ "created TCP client to " ++ (show c_china_tcp)
+  let c_china_tcp = TCP.Config {TCP.host = zhina_host', TCP.port = zhina_port', TCP.passive = True}
+  t_china_tcp <- TCP.new $ c_china_tcp
+  r_china_tcp <- Transport.new t_china_tcp
+  infoM nameF $ "created client: " ++ (show c_china_tcp)
 
-        let c_world_tcp =  TCP.Config {TCP.host = world_host', TCP.port = world_port'}
-        r_world <- TCP.new $ c_world_tcp
-        infoM nameF $ "created TCP client to " ++ (show c_world_tcp)
+  let c_world_tcp = TCP.Config {TCP.host = world_host', TCP.port = world_port', TCP.passive = True}
+  t_world_tcp <- TCP.new $ c_world_tcp
+  r_world_tcp <- Transport.new t_world_tcp
+  infoM nameF $ "created client: " ++ (show c_world_tcp)
 
-        return (r_china_udp, r_china_tcp, r_world)
-    )
-    (\(r_china_udp, r_china_tcp, r_world) -> do
-        R.delete r_china_udp
-        R.delete r_china_tcp
-        R.delete r_world
-    )
-    (\(r_china_udp, r_china_tcp, r_world) -> do
-        let r_china_udp' = timeout zhina_udp_timeout' $ R.resolve r_china_udp
-        let r_china_tcp' = timeout zhina_tcp_timeout' $ R.resolve r_china_tcp
-        let r_world' = timeout world_tcp_timeout' $ R.resolve r_world
-        let r_udp = ZDNS.resolve $ ZDNS.Config
-                { ZDNS.china = r_china_udp'
-                , ZDNS.world = r_world'
-                , ZDNS.chinaIP = ips
-                }
-            r_tcp = ZDNS.resolve $ ZDNS.Config { ZDNS.china = r_china_tcp'
-                                               , ZDNS.world = r_world'
-                                               , ZDNS.chinaIP = ips
-                                               }
-        bracket
-          (do
-              t_udp <- forkIO $ udp $ Config { resolve = SUDP.resolve $ r_udp
-                                             , host = host'
-                                             , port = port'
-                                             }
-              t_tcp <- forkIO $ tcp_listen $ Config { resolve = STCP.resolve $ r_tcp
-                                                    , host = host'
-                                                    , port = port'
-                                                    }
-              return (t_udp, t_tcp))
-          (\(t_udp, t_tcp) -> do
-              killThread t_udp
-              killThread t_tcp)
-          (\_ -> forever $ threadDelay 1000000)
-    )
-data Config a b = Config { resolve :: R.Resolve a b
-                         , host :: String
-                         , port :: String
-                       }
+  let log = L.log (debugM "Main") (debugM "Main")
+  let r_china_udp' = timeout zhina_udp_timeout' $ log $ decode $ R.resolve r_china_udp
+  let r_china_tcp' = timeout zhina_tcp_timeout' $ log $ decode $ R.resolve r_china_tcp
+  let r_world_tcp' = timeout world_tcp_timeout' $ log $ decode $ R.resolve r_world_tcp
+  
+  let r_udp = ZDNS.resolve $ ZDNS.Config
+              { ZDNS.china = r_china_udp'
+              , ZDNS.world = r_world_tcp'
+              , ZDNS.chinaIP = ips
+              }
+          
+      r_tcp = ZDNS.resolve $ ZDNS.Config
+              { ZDNS.china = r_china_tcp'
+              , ZDNS.world = r_world_tcp'
+              , ZDNS.chinaIP = ips
+              }
+              
+  void $ forkIO $ udp $ Config { resolve = encode $ r_udp
+                                 , host = host'
+                                 , port = port'
+                                 }
+           
+  void $ forkIO $ tcp_listen $ Config { resolve = encode $ r_tcp
+                                        , host = host'
+                                        , port = port'
+                                        }
+  forever $ threadDelay 1000000
+
+data Config = Config { resolve :: R.Resolve ByteString ByteString
+                     , host :: String
+                     , port :: String
+                     }
     
-    
-udp :: Config ByteString ByteString -> IO ()
+udp :: Config  -> IO ()
 udp c = do
   let nameF = nameM ++ ".udp"
   let maxLength = 512 -- 512B is max length of UDP message
@@ -186,11 +162,11 @@ udp c = do
         forever $ do
           (a, sa) <- recvFrom sock maxLength
           forkIO $ do 
-            b <- resolve c a
-            void $ sendTo sock b sa
+            b <- resolve c (BSL.fromStrict a)
+            void $ sendTo sock (BSL.toStrict b) sa
     )
     
-tcp_listen :: Config BSL.ByteString BSL.ByteString -> IO ()
+tcp_listen :: Config -> IO ()
 tcp_listen c = do
   let nameF = nameM ++ ".tcp"
   infoM nameF "starting TCP server"
@@ -206,14 +182,14 @@ tcp_listen c = do
         forever $ do
           bracketOnError
             (accept sock)
-            (\(sock', sa) -> close sock')
+            (\(sock', _) -> close sock')
             (\(sock', sa) -> do 
                 let nameConn = nameF ++ "." ++ (show sa)
-                forkFinally (tcp sock' nameConn (resolve c)) (\e -> close sock'))
+                forkFinally (tcp sock' nameConn (resolve c)) (\_ -> close sock'))
     )
 
 
-tcp sock' nameConn r = do
+tcp sock' _ r = do
   qi <- newEmptyTMVarIO
   qo <- newEmptyTMVarIO
   si <- newTVarIO False
@@ -224,7 +200,6 @@ tcp sock' nameConn r = do
         -- thread receiving messages to qi
         ti <- forkFinally
           (do
-              let nameRecv = nameConn ++ ".recv"
               let recvAll' n = do  
                     bs <- SL.recv sock' n
                     when (BSL.length bs == 0) $ throwIO ThreadKilled
@@ -233,9 +208,7 @@ tcp sock' nameConn r = do
 
               forever $ runMaybeT $ do
                 n <- lift $ recvAll 2
-                n' <- case AP.parseOnly anyWord16be (BSL.toStrict n) of 
-                  Left e -> error "How is it possible?"
-                  Right n' -> return n'
+                let n' = toWord16 (BSL.toStrict n)
                 lift $ do 
                   bs <- recvAll $ fromIntegral n'
                   atomically $ putTMVar qi bs)
@@ -244,7 +217,6 @@ tcp sock' nameConn r = do
         -- thread sending messages from qo
         to <- forkFinally
           (do
-              let nameSend = nameConn ++ ".send"
               let sendAll bs = if BSL.null bs  then
                                  return ()
                                else do
@@ -252,8 +224,11 @@ tcp sock' nameConn r = do
                     sendAll (BSL.drop n bs)
               forever $ do
                 bs <- atomically $ takeTMVar qo
-                sendAll $ toLazyByteString $ word16BE $ fromIntegral $ BSL.length bs
-                sendAll bs)
+                case safeFromIntegral $ BSL.length bs of
+                  Nothing -> return ()
+                  Just n -> do 
+                    sendAll $ BSL.fromStrict $ fromWord16 n
+                    sendAll bs)
           (\_ -> atomically $ writeTVar so True)
         return (ti, to)
     )

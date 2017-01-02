@@ -3,12 +3,13 @@ module IPSet where
 import Data.IntervalMap.Strict (IntervalMap, Interval)
 import qualified Data.IntervalMap.Strict as IM
 
-import Data.Bits
 import Data.Word
 
 type IPv4 = Word32
 
 type IPRange e = Interval e
+
+range :: e -> e -> IPRange e
 range = IM.ClosedInterval
 
 type IPSet e = IntervalMap e ()

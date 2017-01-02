@@ -2,7 +2,6 @@
 module Parse where
 
 import Text.Parsec
-import Text.Parsec.Char
 import IPSet
 
 import Data.Word
@@ -15,7 +14,7 @@ type Parse s u a = (Stream s Identity Char) => Parsec s u a
 
 comment :: Parse s u String
 comment = do
-  char '#'
+  void $ char '#'
   manyTill anyChar (try eof)
 
 spaces' :: Parse s u ()
@@ -50,7 +49,7 @@ range4 :: Parse s u (IPRange IPv4)
 range4 = do
   addr <- ipv4
   option (range addr  addr) $ do
-    char '/'
+    void $ char '/'
     mlen <- int
     when (mlen < 0 || mlen > 32) $
       error "mask length should be in [0, 32)"
