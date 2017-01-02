@@ -31,7 +31,7 @@ executable zhina-dns
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts
-  ghc-options:         -Wall -Werror -Wno-missing-signatures -Wno-name-shadowing
+  ghc-options:         -Wall -Werror -Wno-missing-signatures -Wno-name-shadowing -O2
 
   
 

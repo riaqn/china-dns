@@ -39,7 +39,7 @@ packages:
 - '.'
 - location:
     git: https://github.com/riaqn/resolve.git
-    commit: d03e3bbbfdbde479865dc3681aa04419e0b3e363
+    commit: 4aeb148a1ba64b69e075470195bd198206a91ee9
 #     /home/riaqn/resolve
   extra-dep: true
 
