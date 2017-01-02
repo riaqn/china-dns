@@ -19,6 +19,12 @@
 - 开发效率高
 
 * 概述
+本软件的工作的前提:
+- 从本机访问国外DNS的TCP 53端口会通过代理(ss-redir, VPN, etc.), 否则无
+  法避免污染
+- 通过的那个代理,和你用来转发其他流量(http, etc.)的代理,是同一台主机, 或者至少在同一个国家
+  /地区, 否则无法发挥CDN的作用
+
 本软件的自带解析策略:
 1. 收到一个请求, 同时向国内DNS (例如 =114.114.114.114= )和国外DNS (例
    如 =8.8.8.8=)发出.
@@ -73,31 +79,25 @@ curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > c
   ZHINA_TCP_TIMEOUT=2000000 ./zhina-dns < china.txt
 #+end_src
 
-建议在本服务的外面套一层pdnsd, 参考配置如下:
+由于每次对 =zhina-dns= 的请求(如果是国外网站的
+话)都需要联系国外DNS服务器, 因此延迟会非常高(可能高达300ms), 强烈建议
+在本服务的外面套一层 =pdnsd= 作为缓存, 参考配置如下(别忘了 global Section):
+
 #+begin_example
   server {
           label= "zhina-dns";
           ip = 127.0.0.1;
           port = 5300;
           edns_query=off;
-          timeout=5;     
+          timeout=5;
           purge_cache=off; 
   }
-  server {
-          label= "upstream";
-          file = "/etc/resolv.conf.upstream"; 
-          timeout=1;
-          caching=off;
-  }
+
 #+end_example
-这样在 =zhina-dns= 失败后, pdnsd会临时返回 ISP 提供的IP而不做cache.
+=purge_cache= 的意思: 在该服务器(zhina-dns)不可用的情况下, 即便已有的cache已经
+过期也使用. 
 
 * 待办
   以下大多数功能其实都是上游库 [[https://github.com/riaqn/resolve][resolve]] (也是我维护的) 需要做的,上游库
   增加了之后,在本软件中添加相应功能就很简单.
-  - cache
-  - edns支持
-  - =resolv.conf= 支持
-
-
-
+  - edns支持（已经能正确处理EDNS， 但是无法利用EDNS的优势）
