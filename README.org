@@ -1,5 +1,7 @@
 #+TITLE: 一个抗污染，同时CDN友好的DNS代理
 
+[[README_en.org][README in English]]
+
 *急需各个平台上的静态二进制版本, 有兴趣参与的同学请联系 zhina 横杠 dns at riaqn dot org*
 
 目前已经有的二进制版本:
@@ -12,7 +14,7 @@
 
 请到Releases页下载.
 
-之所以要写这个是因为已有的 ChinaDNS-C 经常行为异常,所以不如直接自己写
+之所以要写这个是因为已有的 ChinaDNS 经常行为异常,所以不如直接自己写
 一个. 用haskell是因为
 - 高并发
 - 静态安全
@@ -95,7 +97,7 @@ forward-zone:
   name: "."
   forward-addr: 127.0.0.1@5300
 #+end_src
-=do-not-query-localhost= : 允许本地服务器作为上游.
+=do-not-query-localhost: no= : 允许本地服务器作为上游.
 
 * 待办
   以下大多数功能其实都是上游库 [[https://github.com/riaqn/resolve][resolve]] (也是我维护的) 需要做的,上游库
