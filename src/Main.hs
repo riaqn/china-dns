@@ -16,7 +16,8 @@ import Network.Socket.ByteString
 import qualified Resolve.Types as R
 import qualified Resolve.DNS.Transport.Helper.UDP as UDP
 import qualified Resolve.DNS.Transport.Helper.LiveTCP as TCP
-import qualified Resolve.DNS.Transport as Transport
+import qualified Resolve.DNS.Transport.Dumb as D
+
 import qualified Resolve.DNS.Lookup as L
 import Resolve.DNS.Utils
 
@@ -69,8 +70,7 @@ main = do
   world_host <- lookupEnv "WORLD_HOST"
   world_port <- lookupEnv "WORLD_PORT"
   
-  zhina_udp_timeout <- lookupEnv "ZHINA_UDP_TIMEOUT"
-  zhina_tcp_timeout <- lookupEnv "ZHINA_TCP_TIMEOUT"
+  zhina_timeout <- lookupEnv "ZHINA_TIMEOUT"
   world_tcp_timeout <- lookupEnv "WORLD_TCP_TIMEOUT"
   
 
@@ -82,8 +82,7 @@ main = do
   let world_port' = fromMaybe "53" world_port
 
 
-  let zhina_udp_timeout' = maybe 100000 read zhina_udp_timeout
-  let zhina_tcp_timeout' = maybe 1000000 read zhina_tcp_timeout 
+  let zhina_timeout' = maybe 1000000 read zhina_timeout 
   let world_tcp_timeout' = maybe 5000000 read world_tcp_timeout 
 
 
@@ -98,29 +97,26 @@ main = do
 
   let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port', UDP.p_max = 4096}
   t_china_udp <- UDP.new $ c_china_udp
-  r_china_udp <- Transport.new t_china_udp
   infoM nameF $ "created client: " ++ (show c_china_udp)
 
   let c_china_tcp = TCP.Config {TCP.host = zhina_host', TCP.port = zhina_port', TCP.passive = True}
   t_china_tcp <- TCP.new $ c_china_tcp
-  r_china_tcp <- Transport.new t_china_tcp
   infoM nameF $ "created client: " ++ (show c_china_tcp)
 
   let c_world_tcp = TCP.Config {TCP.host = world_host', TCP.port = world_port', TCP.passive = True}
   t_world_tcp <- TCP.new $ c_world_tcp
-  r_world_tcp <- Transport.new t_world_tcp
   infoM nameF $ "created client: " ++ (show c_world_tcp)
 
-  l_china <- L.new $ L.Config { L.udp = Just (timeout zhina_udp_timeout' $ R.resolve r_china_udp, (return 1024))
-                              , L.tcp = Just (timeout zhina_tcp_timeout' $ R.resolve r_china_tcp)
+  l_china <- L.new $ L.Config { L.udp = (t_china_udp, (return 1024))
+                              , L.tcp = (t_china_tcp)
                               }
              
-  l_world <- L.new $ L.Config { L.udp = Nothing
-                              , L.tcp = Just (timeout world_tcp_timeout' $ R.resolve r_world_tcp)}
+  l_world <- L.new $ L.Config { L.udp = (D.dumb, (return 0))
+                              , L.tcp = t_world_tcp}
 
   let r = ZDNS.resolve $ ZDNS.Config
-        { ZDNS.china = R.resolve l_china
-        , ZDNS.world = R.resolve l_world
+        { ZDNS.china = timeout zhina_timeout' $ R.resolve l_china
+        , ZDNS.world = timeout world_tcp_timeout' $ R.resolve l_world
         , ZDNS.chinaIP = ips
         }
               
