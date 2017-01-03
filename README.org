@@ -47,8 +47,7 @@
 - =ZHINA_PORT= 国内的上游服务器端口, 默认 =53=
 - =WORLD_HOST= 国外的上游服务器地址, 默认 =8.8.8.8=
 - =WORLD_PORT= 国外的上游服务器端口, 默认 =53=
-- =ZHINA_UDP_TIMEOUT= 访问国内UDP上游的超时, 单位 μs, 默认 =100000=
-- =ZHINA_TCP_TIMEOUT= 访问国内TCP上游的超时, 单位 μs, 默认 =1000000=
+- =ZHINA_TIMEOUT= 访问国内上游的超时, UDP+TCP的合计, 单位 μs, 默认 =100000=
 - =WORLD_TCP_TIMEOUT= 访问国外TCP上游的超时, 单位 μs, 默认 =5000000=
 
 对于更细力度的自定义,请fork后修改. 如果你觉得你的修改对于别人也会有价
@@ -76,26 +75,27 @@ curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > c
 #+end_src sh
 此时 =china.txt= 里就是中国的IP了. 现在就可以运行此程序了:
 #+begin_src sh
-  ZHINA_TCP_TIMEOUT=2000000 ./zhina-dns < china.txt
+  ZHINA_TIMEOUT=2000000 ./zhina-dns < china.txt
 #+end_src
 
 由于每次对 =zhina-dns= 的请求(如果是国外网站的
-话)都需要联系国外DNS服务器, 因此延迟会非常高(可能高达300ms), 强烈建议
-在本服务的外面套一层 =pdnsd= 作为缓存, 参考配置如下(别忘了 global Section):
-
-#+begin_example
-  server {
-          label= "zhina-dns";
-          ip = 127.0.0.1;
-          port = 5300;
-          edns_query=off;
-          timeout=5;
-          purge_cache=off; 
-  }
-
-#+end_example
-=purge_cache= 的意思: 在该服务器(zhina-dns)不可用的情况下, 即便已有的cache已经
-过期也使用. 
+话)都需要联系国外DNS服务器, 因此延迟会非常高(可能高达300ms), *强烈建
+议* 在本服务的外面套一层 =pdnsd= 或者 =unbound= 作为缓存. 我用pdnsd似
+乎有点问题, 所以建议用 =unbound=. 参考配置:
+#+begin_src yaml
+server:
+  verbosity: 3
+  interface: 127.0.0.1
+  use-syslog: yes
+  username: "unbound"
+  directory: "/etc/unbound"
+  do-not-query-localhost: no
+  
+forward-zone:
+  name: "."
+  forward-addr: 127.0.0.1@5300
+#+end_src
+=do-not-query-localhost= : 允许本地服务器作为上游.
 
 * 待办
   以下大多数功能其实都是上游库 [[https://github.com/riaqn/resolve][resolve]] (也是我维护的) 需要做的,上游库
