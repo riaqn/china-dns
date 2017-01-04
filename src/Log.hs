@@ -8,18 +8,20 @@ import System.Log.Formatter
 import System.IO
 
 import System.Environment
-import Text.Read
 
-import Control.Monad.Trans.Maybe
+import Parse
+import Text.Parsec
+import Data.Maybe
 
 setup :: IO ()
 setup = do
-
-  m <- runMaybeT $ do
-    x <- MaybeT $ lookupEnv "LOG"
-    MaybeT $ return $ readMaybe x
-  let l = maybe INFO (id) m
-  h <- streamHandler stderr l >>= \lh -> return $ setFormatter lh $
+  env <- fromMaybe "" <$> lookupEnv "LOG"
+  l <- case parse logline "<env>" env of
+    Left e -> error $ show e 
+    Right l -> return $ (rootLoggerName, INFO) : l
+    
+  h <- streamHandler stderr DEBUG >>= \lh -> return $ setFormatter lh $
     simpleLogFormatter "[$tid : $loggername] $msg"
     
-  updateGlobalLogger rootLoggerName ((setLevel l) . setHandlers [h])
+  updateGlobalLogger rootLoggerName (setHandlers [h])
+  mapM_ (\(n,p) -> updateGlobalLogger  n (setLevel p)) l

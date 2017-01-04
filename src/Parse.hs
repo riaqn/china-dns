@@ -9,6 +9,10 @@ import Data.Bits
 import Data.Functor.Identity
 import Control.Monad
 
+import Text.Read hiding (choice)
+
+import System.Log.Logger
+
 type Range4 = IPRange IPv4
 type Parse s u a = (Stream s Identity Char) => Parsec s u a
 
@@ -56,3 +60,22 @@ range4 = do
     let mask = (bit $ 32 - mlen) - 1
     return $ range (addr .&. (complement mask)) (addr .|. mask)
 
+logpair :: Parse s u (String, Priority)
+logpair = do
+  name <- many1 (alphaNum <|> char '.')
+  spaces
+  void $ char '='
+  spaces
+  level <- many1 alphaNum
+  spaces
+  l <- case readMaybe level of
+    Nothing -> error $ (show level) ++ " is not a log level"
+    Just x -> return x
+  return (name, l)
+  
+logline :: Parse s u [(String, Priority)]
+logline = do
+  x <- sepEndBy logpair (char ',' >> spaces)
+  eof
+  return x
+  
