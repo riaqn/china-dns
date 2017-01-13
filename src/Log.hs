@@ -7,19 +7,8 @@ import System.Log.Formatter
 
 import System.IO
 
-import System.Environment
-
-import Parse
-import Text.Parsec
-import Data.Maybe
-
-setup :: IO ()
-setup = do
-  env <- fromMaybe "" <$> lookupEnv "LOG"
-  l <- case parse logline "<env>" env of
-    Left e -> error $ show e 
-    Right l -> return $ (rootLoggerName, INFO) : l
-    
+setup :: [(String, Priority)] -> IO ()
+setup l = do
   h <- streamHandler stderr DEBUG >>= \lh -> return $ setFormatter lh $
     simpleLogFormatter "[$tid : $loggername] $msg"
     

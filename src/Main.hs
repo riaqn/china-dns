@@ -2,10 +2,13 @@ module Main where
 
 import qualified ZhinaDNS as ZDNS
 import qualified IPSet
-import Text.Parsec
+import qualified NameSet
+import Text.Parsec (parse, Line)
 import Parse
 import qualified Server as S
 import qualified Log
+import Options.Applicative
+
 
 import System.IO
 import System.Log.Logger
@@ -27,7 +30,6 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 
 import Data.ByteString.Builder
-import Data.Maybe
 
 import Control.Monad
 import Control.Monad.STM
@@ -38,72 +40,130 @@ import Control.Concurrent
 import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM.TMVar
 
-import System.Environment
-
 import Control.Exception
 
 
 nameM = "Main"
 
-readChinaIP :: Handle -> IO (Either String [IPSet.Range IPSet.IPv4])
-readChinaIP h = helper 0 []
+readLines :: Handle -> (Line -> String -> Either e (Maybe a)) -> IO (Either e [a])
+readLines h p = helper 0 []
   where helper i t = do
           done <- hIsEOF h
           if done then do
             return $ Right t
             else do
             l <- hGetLine h
-            case parse (line i) "" l of
-              Left e -> return $ Left $ show e
+            case p i l of
+              Left e -> return $ Left $ e
               Right ip' -> helper (i +1) (maybe t (\ip -> ip : t) ip')
 
-main :: IO ()
-main = do
-  Log.setup
+data Config = Config { host :: Maybe String
+                     , port :: String
+                     , zhina_host :: String
+                     , zhina_port :: String
+                     , world_host :: String
+                     , world_port :: String
+                     , zhina_timeout :: Int
+                     , world_timeout :: Int
+                     , log_level :: [(String, Priority)]
+                     , zhina_ip :: String
+                     , world_name :: String
+                     }
+
+config :: Parser Config
+config = Config <$>
+         option (Just <$> str) ( long "host" <>
+                       metavar "HOST" <>
+                       value Nothing <>
+                       showDefault <>
+                       help "hostname to bind" ) <*>
+         strOption ( long "port" <>
+                     metavar "PORT" <>
+                     value "5300" <>
+                     showDefault <>
+                     help "port number to bind" ) <*>
+         strOption ( long "zhina_host" <>
+                     metavar "HOST" <>
+                     value "114.114.114.114" <>
+                     showDefault <>
+                     help "upstream Chinese server host" ) <*>
+         strOption ( long "zhina_port" <>
+                     metavar "PORT" <>
+                     value "53" <>
+                     showDefault <>
+                     help "upstream Chinese server port" ) <*>
+         strOption ( long "world_host" <>
+                     metavar "HOST" <>
+                     value "8.8.8.8" <>
+                     showDefault <>
+                     help "upstream foreign server host" ) <*>
+         strOption ( long "world_port" <>
+                     metavar "PORT" <>
+                     value "53" <>
+                     showDefault <>
+                     help "upstream foreign server port" ) <*>
+         option auto ( long "zhina_timeout" <>
+                       metavar "MICROSEC" <>
+                       value 1000000 <>
+                       showDefault <>
+                       help "timeout for Chinese upstream, UDP and TCP combined ") <*>
+         option auto ( long "world_timeout" <>
+                       metavar "MICROSEC" <>
+                       value 5000000 <>
+                       showDefault <>
+                       help "timeout for foreign upstream, UDP and TCP combined") <*>
+         option (eitherReader $ \s -> case parse log_line "" s of
+                    Left e -> Left $ show e
+                    Right b -> Right b ) ( long "log_level" <>
+                       metavar "SPEC" <>
+                       value [(rootLoggerName, INFO)] <>
+                       showDefault <>
+                       help "spec for logging") <*>
+         strOption ( long "zhina_ip" <>
+                     metavar "PATH" <>
+                     showDefault <>
+                     help "file containing Chinese IP ranges") <*>
+         strOption ( long "world_name" <>
+                     metavar "PATH" <>
+                     showDefault <>
+                     help "file containing foreign domain names")
+
+main = execParser opts >>= main'
+  where opts  = info (helper <*> config)
+                ( fullDesc <>
+                  progDesc "a DNS proxy for people in Zhina" 
+                )
+
+main' :: Config -> IO ()
+main' c = do
+  Log.setup (log_level c)
   
   let nameF = nameM ++ ".main"
 
-  host <- lookupEnv "HOST"
-  port <- lookupEnv "PORT"
-  zhina_host <- lookupEnv "ZHINA_HOST"
-  zhina_port <- lookupEnv "ZHINA_PORT"
-  world_host <- lookupEnv "WORLD_HOST"
-  world_port <- lookupEnv "WORLD_PORT"
+  let readLines' f p = withFile (f c) ReadMode (\h -> do
+                                                   r <- readLines h (\i l -> parse (p i) (f c) l)
+                                                   case r of 
+                                                     Left e -> error $ show e
+                                                     Right b -> return b
+                                                   )
+
+  zhina_ip' <- readLines' zhina_ip ip_line
+  world_name' <- readLines' world_name name_line
   
-  zhina_timeout <- lookupEnv "ZHINA_TIMEOUT"
-  world_tcp_timeout <- lookupEnv "WORLD_TCP_TIMEOUT"
+  let ips = foldl (\a b -> IPSet.add a b) IPSet.create zhina_ip'
+  infoM nameF $ (show $ length zhina_ip') ++  " Chinese IP ranges loaded"
+  let names = foldl (\a b -> NameSet.add a b) NameSet.create world_name'
+  infoM nameF $ (show $ length world_name') ++ " foreign domains loaded"
   
-
-  let host' = fromMaybe "127.0.0.1" host
-  let port' = fromMaybe "5300" port
-  let zhina_host' = fromMaybe "114.114.114.114" zhina_host
-  let zhina_port' = fromMaybe "53" zhina_port
-  let world_host' = fromMaybe "8.8.8.8" world_host
-  let world_port' = fromMaybe "53" world_port
-
-
-  let zhina_timeout' = maybe 1000000 read zhina_timeout 
-  let world_tcp_timeout' = maybe 5000000 read world_tcp_timeout 
-
-
-  l' <- readChinaIP stdin
-  l <- case l' of
-    Left e -> error e
-    Right l -> return l
-  
-  let ips = foldl (\a b -> IPSet.add a b) IPSet.create l
-  infoM nameF $ (show $ IPSet.size ips) ++  " china subnets loaded"
-
-
-  let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port', UDP.p_max = 4096}
+  let c_china_udp = UDP.Config {UDP.host = zhina_host c, UDP.port = zhina_port c, UDP.p_max = 4096}
   t_china_udp <- UDP.new $ c_china_udp
   infoM nameF $ "created client: " ++ (show c_china_udp)
 
-  let c_china_tcp = TCP.Config {TCP.host = zhina_host', TCP.port = zhina_port', TCP.passive = True}
+  let c_china_tcp = TCP.Config {TCP.host = zhina_host c, TCP.port = zhina_port c, TCP.passive = True}
   t_china_tcp <- TCP.new $ c_china_tcp
   infoM nameF $ "created client: " ++ (show c_china_tcp)
 
-  let c_world_tcp = TCP.Config {TCP.host = world_host', TCP.port = world_port', TCP.passive = True}
+  let c_world_tcp = TCP.Config {TCP.host = world_host c, TCP.port = world_port c, TCP.passive = True}
   t_world_tcp <- TCP.new $ c_world_tcp
   infoM nameF $ "created client: " ++ (show c_world_tcp)
 
@@ -115,32 +175,33 @@ main = do
                               , L.tcp = t_world_tcp}
 
   let r = ZDNS.resolve $ ZDNS.Config
-        { ZDNS.china = timeout zhina_timeout' $ R.resolve l_china
-        , ZDNS.world = timeout world_tcp_timeout' $ R.resolve l_world
+        { ZDNS.china = timeout (zhina_timeout c) $ R.resolve l_china
+        , ZDNS.world = timeout (world_timeout c) $ R.resolve l_world
         , ZDNS.chinaIP = ips
+        , ZDNS.worldName = names
         }
               
-  void $ forkIO $ udp $ Config { resolve = S.server $ S.Config { S.back = r
+  void $ forkIO $ udp $ ServerConfig { resolve = S.server $ S.Config { S.back = r
                                                                , S.is_udp = True
                                                                }
-                               , host = host'
-                               , port = port'
+                               , server_host = host c
+                               , server_port = port c
                                }
            
-  void $ forkIO $ tcp_listen $ Config { resolve = S.server $ S.Config { S.back = r
+  void $ forkIO $ tcp_listen $ ServerConfig { resolve = S.server $ S.Config { S.back = r
                                                                       , S.is_udp = False
                                                                       }
-                                      , host = host'
-                                      , port = port'
+                                      , server_host = host c
+                                      , server_port = port c
                                       }
   forever $ threadDelay 1000000
 
-data Config = Config { resolve :: R.Resolve BSL.ByteString BSL.ByteString
-                     , host :: String
-                     , port :: String
-                     }
+data ServerConfig = ServerConfig { resolve :: R.Resolve BSL.ByteString BSL.ByteString
+                                 , server_host :: Maybe String
+                                 , server_port :: String
+                                 }
     
-udp :: Config  -> IO ()
+udp :: ServerConfig  -> IO ()
 udp c = do
   let nameF = nameM ++ ".udp"
   let maxLength = 512 -- 512B is max length of UDP message
@@ -148,7 +209,7 @@ udp c = do
   
   infoM nameF $ "starting UDP server"
   let hints = defaultHints { addrSocketType = Datagram, addrFlags = [AI_ADDRCONFIG, AI_PASSIVE]}
-  addr:_ <- getAddrInfo (Just hints) (Just $ host c) (Just $ port c)
+  addr:_ <- getAddrInfo (Just hints) (server_host c) (Just $ server_port c)
   bracket 
     (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
     close
@@ -162,12 +223,12 @@ udp c = do
             void $ sendTo sock (BSL.toStrict b) sa
     )
     
-tcp_listen :: Config -> IO ()
+tcp_listen :: ServerConfig -> IO ()
 tcp_listen c = do
   let nameF = nameM ++ ".tcp"
   infoM nameF "starting TCP server"
   let hints = defaultHints { addrSocketType = Stream, addrFlags = [AI_ADDRCONFIG, AI_PASSIVE]}
-  addr:_ <- getAddrInfo (Just hints) (Just $ host c) (Just $ port c)
+  addr:_ <- getAddrInfo (Just hints) (server_host c) (Just $ server_port c)
   bracket
     (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
     close

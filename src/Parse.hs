@@ -3,6 +3,9 @@ module Parse where
 
 import Text.Parsec
 import IPSet
+import NameSet
+
+import Data.ByteString.Char8 (pack)
 
 import Data.Bits
 import Data.Functor.Identity
@@ -25,8 +28,8 @@ comment = do
 spaces' :: Parse s u ()
 spaces' =   void $ many $ oneOf " \t\f\v"
 
-line :: Line -> Parse s u (Maybe Range4)
-line i = do
+ip_line :: Line -> Parse s u (Maybe Range4)
+ip_line i = do
   pos <- getPosition
   setPosition (setSourceLine pos i)
   spaces'
@@ -38,10 +41,29 @@ line i = do
              eof
              return $ Just r
          ]
+
+name_line :: Line -> Parse s u (Maybe NAME)
+name_line i = do
+  pos <- getPosition
+  setPosition (setSourceLine pos i)
+  spaces'
+  choice [ comment >> return Nothing
+         , eof >> return Nothing
+         , do
+             r <- name
+             spaces'
+             eof
+             return $ Just r
+         ]
+
+name :: Parse s u (NAME)
+name = do
+  l <- sepBy1 (many (alphaNum <|> char '-')) (char '.')
+  return $ NAME $ map pack (foldr (:) [""] l)
   
 range4 :: Parse s u (Range IPv4)
 range4 = do
-  x <- manyTill anyChar (space)
+  x <- manyTill anyChar ((void space) <|> eof)
   case readEither x of
     Left e -> error e
     Right r -> do
@@ -50,9 +72,9 @@ range4 = do
       let mask = (1 `shift` (32 - mlen)) - 1
       return $ range (IPv4 $ ip' .&. (complement mask)) (IPv4 $ ip' .|. mask)
 
-logpair :: Parse s u (String, Priority)
-logpair = do
-  name <- many1 (alphaNum <|> char '.')
+log_pair :: Parse s u (String, Priority)
+log_pair = do
+  name <- many (alphaNum <|> char '.')
   spaces
   void $ char '='
   spaces
@@ -63,9 +85,9 @@ logpair = do
     Just x -> return x
   return (name, l)
   
-logline :: Parse s u [(String, Priority)]
-logline = do
-  x <- sepEndBy logpair (char ',' >> spaces)
+log_line :: Parse s u [(String, Priority)]
+log_line = do
+  x <- sepEndBy log_pair (char ',' >> spaces)
   eof
   return x
   

@@ -28,10 +28,13 @@ executable zhina-dns
                      , transformers
                      , stm
                      , parsec
+                     , unordered-containers
                      , iproute
+                     , optparse-applicative
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts
+
   ghc-options:         -Wall -Werror -Wno-missing-signatures -Wno-name-shadowing -O2
 
   
