@@ -1,10 +1,9 @@
-#+TITLE: 一个抗污染，同时CDN友好的DNS代理
+#+TITLE: A DNS proxy preventing poisoning and CDN-friendly
 
-[[README_en.org][README in English]]
 
-*急需各个平台上的静态二进制版本, 有兴趣参与的同学请联系 zhina 横杠 dns at riaqn dot org*
+*I'm looking for statically compiled binary for every platform. If you're willing to contribute, please contact me at zhina dash dns at riaqn dot org*
 
-目前已经有的二进制版本:
+Available binary versions so far:
 |        | Linux | MacOS | Windows |
 |--------+-------+-------+---------|
 | x86_64 | ✓     | ✓     |         |
@@ -12,53 +11,74 @@
 | ARMv7l | ✓     | n/a   |         |
 | ...    |       |       |         |
 
-请到Releases页下载.
+Please see the Release page for downloads.
 
-之所以要写这个是因为已有的 ChinaDNS 经常行为异常,所以不如直接自己写
-一个. 用haskell是因为
-- 高并发
-- 静态安全
-- 开发效率高
+I'm developing this project because the existing
+ChinaDNS occasionally behaves wierd, so I would rather write one by
+myself. I'm using Haskell because of:
+- high concurrency
+- static type safety
+- efficient development
 
-* 概述
-本软件的工作的前提:
-- 从本机访问国外DNS的TCP 53端口会通过代理(ss-redir, VPN, etc.), 否则无
-  法避免污染
-- 通过的那个代理,和你用来转发其他流量(http, etc.)的代理,是同一台主机, 或者至少在同一个国家
-  /地区, 否则无法发挥CDN的作用
+* Overview
+This program assumes:
+- access to the TCP port 53 on the foreign DNS is proxy-ed(ss-redir, VPN,
+  etc.), or you will still be poisoned.
+- this proxy has to be the same host you use to proxy other traffic
+  (http, etc.), otherwise we couldn't guarantee a CDN-optimal
+  result.
 
-本软件的自带解析策略:
-1. 收到一个请求, 同时向国内DNS (例如 =114.114.114.114= )和国外DNS (例
-   如 =8.8.8.8=)发出.
-2. 先看国内DNS返回的结果(如果国内DNS失败,则直接失败), 如果包含国外IP,
-   则到3,否则返回国内结果.
-3. 看国外DNS返回的结果,如果国外DNS失败,则失败.
+The built-in resolution strategy:
+1. On receiving a request, check if the request is for a foreign
+   domain(=--world_name=). yes: go to 2; no: go to 3;
+2. Forward the request to foreign DNS and wait for the result.
+3. Forward the request to Chinese and foreign DNS at the same time.
+   Check if the response from Chinese DNS contains foreign
+   IP(=--china_ip=). yes: go to 4; no: go to 5;
+4. wait for response from foreign DNS
+5. return Chinese result immediately.
 
-*注意: 对于国外DNS我们只会走TCP.*
+*Note: only TCP is used for foreign DNS.*
 
-如果你对解析策略有任何建议,欢迎到issues页提出. 
+If you have any thoughts about the resolution strategy, please feel
+free to share it on the issue page.
 
-* 配置
-本软件提供最小化的配置接口, 接受以下环境变量:
-- =HOST= 绑定的地址, 默认 =127.0.0.1=
-- =PORT= 绑定的端口, 默认 =5300=
-- =ZHINA_HOST= 国内的上游服务器地址, 默认 =114.114.114.114=
+* Configuration
+#+Begin_example
+  Usage: zhina-dns [--host HOST] [--port PORT] [--zhina_host HOST]
+                   [--zhina_port PORT] [--world_host HOST] [--world_port PORT]
+                   [--zhina_timeout MICROSEC] [--world_timeout MICROSEC]
+                   [--log_level SPEC] --zhina_ip PATH --world_name PATH
+    a DNS proxy for people in Zhina
 
-  请不要用阿里的DNS (223.5.5.5), 因为他们不支持基于 TCP 的查询, 对于部
-  分请求会报 Timeout.
-- =ZHINA_PORT= 国内的上游服务器端口, 默认 =53=
-- =WORLD_HOST= 国外的上游服务器地址, 默认 =8.8.8.8=
-- =WORLD_PORT= 国外的上游服务器端口, 默认 =53=
-- =ZHINA_TIMEOUT= 访问国内上游的超时, UDP+TCP的合计, 单位 μs, 默认 =100000=
-- =WORLD_TCP_TIMEOUT= 访问国外TCP上游的超时, 单位 μs, 默认 =5000000=
+  Available options:
+    -h,--help                Show this help text
+    --host HOST              hostname to bind (default: Nothing)
+    --port PORT              port number to bind (default: "5300")
+    --zhina_host HOST        upstream Chinese server
+                             host (default: "114.114.114.114")
+    --zhina_port PORT        upstream Chinese server port (default: "53")
+    --world_host HOST        upstream foreign server host (default: "8.8.8.8")
+    --world_port PORT        upstream foreign server port (default: "53")
+    --zhina_timeout MICROSEC timeout for Chinese upstream, UDP and TCP
+                             combined (default: 1000000)
+    --world_timeout MICROSEC timeout for foreign upstream, UDP and TCP
+                             combined (default: 5000000)
+    --log_level SPEC         spec for logging (default: [("",INFO)])
+    --zhina_ip PATH          file containing Chinese IP ranges
+    --world_name PATH        file containing foreign domain names
+#+end_example
 
-对于更细力度的自定义,请fork后修改. 如果你觉得你的修改对于别人也会有价
-值,欢迎 pull request.
-- 如果要修改上游服务器/本地服务器,请查看 [[src/Main.hs]]
-- 如果要修改解析策略,请查看 [[src/ZhinaDNS.hs]]
+Please fork this repository for more fine-grained modifications; feel
+free to drop a pull request if you think your modifications may be also
+useful to others.
+- for modifications of upstream servers/local servers, see [[src/Main.hs]]
+- for modifications of the resolution strategy, see [[src/ZhinaDNS.hs]]
 
-* 运行
-本软件在启动时会从 =stdin= 读入中国的 IPv4 列表, 格式大概如下:
+* Running
+This program needs a list of Chinese IP ranges and a list of
+foreign domain names on startup. The formats of both are similar and
+is as follows:
 #+begin_example
   # this is allowed
     # this is also allowed
@@ -70,20 +90,21 @@
    127.0.0.1
 #+end_example
 
-本项目自带了一个能从 [[ftp://ftp.ripe.net/pub/stats/apnic/][ripe.net]] 的公开数据库生成该文件的脚本
-[[china.awk]], *请修改该文件并且加入你的VPS的IP地址*, 然后用以下命令生成中国 IPv4 列表:
+Both files are shipped with the project already: check out [[china.txt]]
+and [[world.txt]]. However, if you prefer generating these files yourself,
+please check out [[china.awk]] (for =china.txt=) and
+[[https://github.com/cokebar/gfwlist2dnsmasq]] (for =world.txt=).
+
 #+begin_src sh
-curl ftp://ftp.ripe.net/pub/stats/apnic/delegated-apnic-latest | ./china.awk > china.txt
-#+end_src sh
-此时 =china.txt= 里就是中国的IP了. 现在就可以运行此程序了:
-#+begin_src sh
-  ZHINA_TIMEOUT=2000000 ./zhina-dns < china.txt
+./zhina-dns --zhina_ip china.txt --world_name world.txt
 #+end_src
 
-由于每次对 =zhina-dns= 的请求(如果是国外网站的
-话)都需要联系国外DNS服务器, 因此延迟会非常高(可能高达300ms), *强烈建
-议* 在本服务的外面套一层 =pdnsd= 或者 =unbound= 作为缓存. 我用pdnsd似
-乎有点问题, 所以建议用 =unbound=. 参考配置:
+Since every request to =zhina-dns= involves a request to the foreign
+DNS(if it's a foreign website), the latency may be quite high(as
+high as 300ms), it's thus *strongly recommended* to wrap a layer of
+=pdnsd= or =unbound= as DNS cache. I had some problems with =pdnsd=, so
+=unbound= maybe better. An example of =unbound.conf=: 
+
 #+begin_src yaml
 server:
   verbosity: 3
@@ -97,9 +118,13 @@ forward-zone:
   name: "."
   forward-addr: 127.0.0.1@5300
 #+end_src
-=do-not-query-localhost: no= : 允许本地服务器作为上游.
+=do-not-query-localhost: no= overrides the restriction of =unbound= that
+local servers can't be used as upstream server.
 
-* 待办
-  以下大多数功能其实都是上游库 [[https://github.com/riaqn/resolve][resolve]] (也是我维护的) 需要做的,上游库
-  增加了之后,在本软件中添加相应功能就很简单.
-  - edns支持（已经能正确处理EDNS， 但是无法利用EDNS的优势）
+* TO DO
+  Most of the following features are also TODOs of the upstream library
+  [[https://github.com/riaqn/resolve][resolve]] (of which I'm also a maintainer); it would thus be quite easy
+  after the upstream library has added the features.
+  - EDNS support :: EDNS is already handled correctly，but the benefits
+		    of EDNS(larger UDP size, etc.) are not exploited
+                    fully yet
