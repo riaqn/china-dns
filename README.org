@@ -8,7 +8,7 @@ Available binary versions so far:
 |--------+-------+-------+---------|
 | x86_64 | ✓     | ✓     |         |
 | x86    |       | n/a   |         |
-| ARMv7l | ✓     | n/a   |         |
+| ARMv7h | ✓     | n/a   |         |
 | ...    |       |       |         |
 
 Please see the Release page for downloads.
@@ -95,6 +95,7 @@ and [[world.txt]]. However, if you prefer generating these files yourself,
 please check out [[china.awk]] (for =china.txt=) and
 [[https://github.com/cokebar/gfwlist2dnsmasq]] (for =world.txt=).
 
+And we are free to go:
 #+begin_src sh
 ./zhina-dns --zhina_ip china.txt --world_name world.txt
 #+end_src
@@ -128,3 +129,8 @@ local servers can't be used as upstream server.
   - EDNS support :: EDNS is already handled correctly，but the benefits
 		    of EDNS(larger UDP size, etc.) are not exploited
                     fully yet
+  - IPv6 support :: I doubt there will be IPv6 in China before I die,
+                    though
+  - switch for foreign UDP :: By far only foreign DNS server is only
+       queried via TCP because I feel most users have only
+       stream proxy(SOCKS5 as opposed to VPN), but we should add a switch for that.
