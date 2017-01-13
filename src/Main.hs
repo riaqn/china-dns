@@ -1,7 +1,7 @@
 module Main where
 
 import qualified ZhinaDNS as ZDNS
-import IPSet
+import qualified IPSet
 import Text.Parsec
 import Parse
 import qualified Server as S
@@ -45,7 +45,7 @@ import Control.Exception
 
 nameM = "Main"
 
-readChinaIP :: Handle -> IO (Either String [IPRange IPv4])
+readChinaIP :: Handle -> IO (Either String [IPSet.Range IPSet.IPv4])
 readChinaIP h = helper 0 []
   where helper i t = do
           done <- hIsEOF h
@@ -91,8 +91,8 @@ main = do
     Left e -> error e
     Right l -> return l
   
-  let ips = foldl (\a b -> add a b) create l
-  infoM nameF $ (show $ size ips) ++  " china subnets loaded"
+  let ips = foldl (\a b -> IPSet.add a b) IPSet.create l
+  infoM nameF $ (show $ IPSet.size ips) ++  " china subnets loaded"
 
 
   let c_china_udp = UDP.Config {UDP.host = zhina_host', UDP.port = zhina_port', UDP.p_max = 4096}

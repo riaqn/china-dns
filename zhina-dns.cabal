@@ -28,6 +28,7 @@ executable zhina-dns
                      , transformers
                      , stm
                      , parsec
+                     , iproute
   default-extensions:  MultiParamTypeClasses
                      , FlexibleInstances
                      , FlexibleContexts
