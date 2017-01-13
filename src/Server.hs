@@ -55,7 +55,12 @@ server c bs_a = do
         (not $ null $ additional m_a) ) $ do
     throwIO $ WierdQuery "some sections should be empty"
 
-  let a = L.Query { L.qquestion = question m_a
+  q <- case question m_a of
+    [] -> throwIO $ WierdQuery "zero question"
+    [q] -> return q
+    _ -> throwIO $ WierdQuery "multiple questions"
+
+  let a = L.Query { L.qquestion = q
                   , L.qopt = [] 
                   }
           
