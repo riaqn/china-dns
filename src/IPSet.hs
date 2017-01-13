@@ -1,9 +1,10 @@
 module IPSet
   ( module IPSet
   , IPv4(IPv4)
+  , unIPv4
   ) where
 
-import Resolve.DNS.Types (IPv4(IPv4))
+import Resolve.DNS.Types (IPv4(IPv4), unIPv4)
 import Data.IntervalMap.Strict (IntervalMap, Interval)
 import qualified Data.IntervalMap.Strict as IM
 

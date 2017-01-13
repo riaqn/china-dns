@@ -8,10 +8,9 @@ import NameSet
 import Data.ByteString.Char8 (pack)
 
 import Data.Bits
+import Data.Char
 import Data.Functor.Identity
 import Control.Monad
-
-import Data.IP (addrRangePair, fromIPv4)
 
 import Text.Read hiding (choice)
 
@@ -60,17 +59,30 @@ name :: Parse s u (NAME)
 name = do
   l <- sepBy1 (many (alphaNum <|> char '-')) (char '.')
   return $ NAME $ map pack (foldr (:) [""] l)
+
+dig :: Parse s u Int
+dig = do
+  l <- many1 digit
+  return $ foldl (\a b -> a * 10 + b) 0 $ map digitToInt l
+
+ipv4 :: Parse s u IPv4
+ipv4 = do
+    as <- dig `sepBy1` char '.'
+    check as
+    return $ IPv4 $ foldl (\a b -> (a `shift` 8) .|. (fromIntegral b)) 0 as
+  where
+    test adr = when (adr < 0 || 255 < adr) (parserFail "every componenent should be in [0, 256)")
+    check as = do
+        when (length as /= 4) $ parserFail "IPv4 should have 4 componenets"
+        mapM_ test as
   
 range4 :: Parse s u (Range IPv4)
 range4 = do
-  x <- manyTill anyChar ((void space) <|> eof)
-  case readEither x of
-    Left e -> error e
-    Right r -> do
-      let (ip, mlen) = addrRangePair r
-      let ip' =  foldl (\b a -> (b `shift` 8) .|. fromIntegral a) 0 (fromIPv4 ip)
-      let mask = (1 `shift` (32 - mlen)) - 1
-      return $ range (IPv4 $ ip' .&. (complement mask)) (IPv4 $ ip' .|. mask)
+  ip <- ipv4
+  mlen <- option 32 $ char '/' >> dig
+  when (mlen < 0 || mlen > 32) (parserFail "IPv4 mask length should be in [0, 32]")
+  let mask = (1 `shift` (32 - mlen)) - 1
+  return $ range (IPv4 $ (unIPv4 ip) .&. (complement mask)) (IPv4 $ (unIPv4 ip) .|. mask)
 
 log_pair :: Parse s u (String, Priority)
 log_pair = do
