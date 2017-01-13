@@ -1,5 +1,5 @@
 name:                zhina-dns
-version:             0.1.4.0
+version:             0.1.5.0
 synopsis:            A DNS proxy preventing pollution and CDN-friendly
 description:         Please see README.org
 homepage:            https://github.com/riaqn/zhina-dns#readme
