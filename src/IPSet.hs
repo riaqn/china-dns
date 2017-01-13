@@ -1,11 +1,11 @@
-module IPSet where
+module IPSet
+  ( module IPSet
+  , IPv4(IPv4)
+  ) where
 
+import Resolve.DNS.Types (IPv4(IPv4))
 import Data.IntervalMap.Strict (IntervalMap, Interval)
 import qualified Data.IntervalMap.Strict as IM
-
-import Data.Word
-
-type IPv4 = Word32
 
 type IPRange e = Interval e
 

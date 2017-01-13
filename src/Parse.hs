@@ -52,13 +52,13 @@ ipv4 = do
 range4 :: Parse s u (IPRange IPv4)
 range4 = do
   addr <- ipv4
-  option (range addr  addr) $ do
+  option (range (IPv4 addr) (IPv4 addr)) $ do
     void $ char '/'
     mlen <- int
     when (mlen < 0 || mlen > 32) $
       error "mask length should be in [0, 32)"
     let mask = (bit $ 32 - mlen) - 1
-    return $ range (addr .&. (complement mask)) (addr .|. mask)
+    return $ range (IPv4 $ addr .&. (complement mask)) (IPv4 $ addr .|. mask)
 
 logpair :: Parse s u (String, Priority)
 logpair = do
