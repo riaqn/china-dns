@@ -122,15 +122,3 @@ forward-zone:
 =do-not-query-localhost: no= overrides the restriction of =unbound= that
 local servers can't be used as upstream server.
 
-* TO DO
-  Most of the following features are also TODOs of the upstream library
-  [[https://github.com/riaqn/resolve][resolve]] (of which I'm also a maintainer); it would thus be quite easy
-  after the upstream library has added the features.
-  - EDNS support :: EDNS is already handled correctly，but the benefits
-		    of EDNS(larger UDP size, etc.) are not exploited
-                    fully yet
-  - IPv6 support :: I doubt there will be IPv6 in China before I die,
-                    though
-  - switch for foreign UDP :: By far only foreign DNS server is only
-       queried via TCP because I feel most users have only
-       stream proxy(SOCKS5 as opposed to VPN), but we should add a switch for that.
